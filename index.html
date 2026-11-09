@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metrobús CDMX en Vivo — mblivemx</title>
+<style>
+  :root { --ink:#1a1a1a; --muted:#666; --line:#e5e5e5; --bg:#fafafa; --card:#fff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:#111; color:#fff; padding:20px 24px; }
+  header h1 { margin:0; font-size:26px; }
+  header p { margin:6px 0 0; color:#bbb; font-size:14px; }
+  header .snap { color:#fff; font-weight:600; }
+  .wrap { max-width:1080px; margin:0 auto; padding:20px 24px 60px; }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:20px 0; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .stat b { display:block; font-size:26px; }
+  .stat span { color:var(--muted); font-size:13px; }
+  .alerts { background:#fff8e1; border:1px solid #ffe082; border-radius:10px; padding:12px 16px; margin-bottom:20px; font-size:14px; }
+  .search { margin-bottom:20px; }
+  .search input { width:100%; padding:12px 14px; font-size:16px; border:1px solid #ccc; border-radius:10px; }
+  .results { margin-top:8px; }
+  .result { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:6px; cursor:pointer; }
+  .result:hover { border-color:#999; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; cursor:pointer; }
+  .card:hover { border-color:#999; }
+  .card h3 { margin:0 0 6px; font-size:18px; }
+  .dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:-1px; }
+  .card .num { font-size:24px; font-weight:700; }
+  .card p { margin:4px 0; color:var(--muted); font-size:13px; }
+  .bar { height:6px; background:#eee; border-radius:3px; overflow:hidden; margin-top:8px; }
+  .bar i { display:block; height:100%; }
+  button.back { margin-bottom:16px; padding:8px 12px; border:1px solid #ccc; background:#fff; border-radius:8px; cursor:pointer; font-size:14px; }
+  h2 { margin:8px 0 12px; }
+  .chip { display:inline-block; background:#f0f0f0; border-radius:20px; padding:4px 10px; font-size:12px; margin:0 6px 6px 0; }
+  .timeline { list-style:none; margin:0; padding:0; }
+  .timeline li { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:6px; cursor:pointer; display:flex; justify-content:space-between; gap:12px; }
+  .timeline li:hover { border-color:#999; }
+  .timeline .st { font-weight:600; }
+  .timeline .near { color:var(--muted); font-size:13px; white-space:nowrap; }
+  .kv { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:12px; }
+  .kv p { margin:6px 0; }
+  .err { background:#fdecea; border:1px solid #f5c6cb; border-radius:10px; padding:12px 16px; color:#721c24; }
+  footer { color:var(--muted); font-size:13px; border-top:1px solid var(--line); padding-top:16px; margin-top:30px; }
+  @media (max-width:640px){ .stats{grid-template-columns:repeat(2,1fr);} header h1{font-size:22px;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Metrobús CDMX en Vivo</h1>
+  <p>Foto de las unidades: <span class="snap" id="snapshot">cargando…</span> · Se actualiza sola cada 30 minutos</p>
+</header>
+<div class="wrap">
+  <div id="error"></div>
+
+  <div class="stats" id="stats"></div>
+  <div class="alerts" id="alerts"></div>
+
+  <div class="search">
+    <input id="q" type="search" placeholder="Buscar estación… (ej. Hidalgo, Insurgentes, La Raza)" autocomplete="off">
+    <div class="results" id="results"></div>
+  </div>
+
+  <div id="view-home">
+    <h2>Líneas</h2>
+    <div class="grid" id="lines"></div>
+  </div>
+
+  <div id="view-line" hidden>
+    <button class="back" data-go="home">← Todas las líneas</button>
+    <h2 id="line-title"></h2>
+    <div id="line-variants"></div>
+    <h3>Estaciones y unidad más cercana</h3>
+    <ul class="timeline" id="line-stops"></ul>
+  </div>
+
+  <div id="view-station" hidden>
+    <button class="back" data-go="home">← Todas las líneas</button>
+    <h2 id="station-title"></h2>
+    <div id="station-lines"></div>
+    <h3>Unidades más cercanas (estimado)</h3>
+    <ul class="timeline" id="station-units"></ul>
+  </div>
+
+  <div id="view-unit" hidden>
+    <button class="back" data-go="home">← Todas las líneas</button>
+    <h2 id="unit-title"></h2>
+    <div class="kv" id="unit-info"></div>
+    <h3>Estaciones más cercanas</h3>
+    <ul class="timeline" id="unit-stations"></ul>
+  </div>
+
+  <footer>
+    <p>Fuente: Metrobús CDMX, datos abiertos GTFS y GTFS-RT (posiciones de vehículos). La foto muestra las unidades reportadas a la hora indicada.</p>
+    <p>Las llegadas son <b>estimadas</b> por distancia (a 18 km/h en ciudad). El feed oficial no trae tiempos de llegada ni alertas en esta foto, así que no se inventan minutos exactos.</p>
+    <p>mblivemx — proyecto no oficial, sin afiliación con Metrobús CDMX.</p>
+  </footer>
+</div>
+
+<script>
+let DATA = null;
+const $ = (id) => document.getElementById(id);
+const norm = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const fmt = (n) => n.toLocaleString("es-MX");
+
+function haversineKm(aLat, aLon, bLat, bLon) {
+  const R = 6371, dLat = (bLat - aLat) * Math.PI / 180, dLon = (bLon - aLon) * Math.PI / 180;
+  const s1 = Math.sin(dLat / 2), s2 = Math.sin(dLon / 2);
+  const a = s1 * s1 + Math.cos(aLat * Math.PI / 180) * Math.cos(bLat * Math.PI / 180) * s2 * s2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+function estMin(km) { return Math.max(1, Math.round(km / 18 * 60)); }
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function show(view) {
+  ["home", "line", "station", "unit"].forEach((v) => { $("view-" + v).hidden = (v !== view); });
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show("home")));
+
+function stopById(id) { return DATA.stops.find((s) => s.id === id); }
+function vehicleLabel(v) {
+  const route = DATA.routes.find((r) => r.route_id === v.route_id);
+  return "Unidad " + (v.label || v.id) + (route ? " · " + route.long_name : "");
+}
+function movingCount(list) { return list.filter((v) => v.speed > 0).length; }
+
+function renderSummary() {
+  const moving = movingCount(DATA.vehicles);
+  $("stats").innerHTML =
+    stat(DATA.vehicles.length, "unidades en la foto") +
+    stat(moving, "en movimiento") +
+    stat(DATA.stops.length, "estaciones") +
+    stat(DATA.lines.length, "líneas");
+  function stat(n, label) { return '<div class="stat"><b>' + fmt(n) + '</b><span>' + label + '</span></div>'; }
+}
+
+function renderAlerts() {
+  $("alerts").textContent = "Sin alertas de servicio en esta foto. Cuando el feed oficial incluya alertas, aparecerán aquí.";
+}
+
+function renderLines() {
+  const el = $("lines");
+  el.innerHTML = "";
+  DATA.lines.forEach((ln) => {
+    const vs = DATA.vehicles.filter((v) => v.line === ln.line);
+    const mv = movingCount(vs);
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML =
+      '<h3><span class="dot" style="background:#' + ln.color + '"></span>Línea ' + ln.line + '</h3>' +
+      '<div class="num">' + fmt(vs.length) + ' unidades</div>' +
+      '<p>' + fmt(mv) + ' en movimiento · ' + fmt(ln.stops) + ' estaciones</p>' +
+      '<div class="bar"><i style="width:' + (vs.length ? Math.round(mv / vs.length * 100) : 0) + '%;background:#' + ln.color + '"></i></div>';
+    card.addEventListener("click", () => showLine(ln.line));
+    el.appendChild(card);
+  });
+  const unassigned = DATA.vehicles.filter((v) => !v.line);
+  if (unassigned.length) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = '<h3><span class="dot" style="background:#999"></span>Sin línea asignada</h3>' +
+      '<div class="num">' + fmt(unassigned.length) + ' unidades</div>' +
+      '<p>El feed no reportó ruta para estas unidades; se muestran con su estación más cercana.</p>';
+    card.addEventListener("click", () => showUnassigned());
+    el.appendChild(card);
+  }
+}
+
+function nearestVehicles(lat, lon, line, n) {
+  return DATA.vehicles
+    .filter((v) => !line || v.line === line)
+    .map((v) => ({ v, km: haversineKm(lat, lon, v.lat, v.lon) }))
+    .sort((a, b) => a.km - b.km)
+    .slice(0, n);
+}
+function nearestStops(lat, lon, n) {
+  return DATA.stops
+    .map((s) => ({ s, km: haversineKm(lat, lon, s.lat, s.lon) }))
+    .sort((a, b) => a.km - b.km)
+    .slice(0, n);
+}
+function nearText(item, line) {
+  const route = DATA.routes.find((r) => r.route_id === item.v.route_id);
+  const dir = route ? " · " + route.long_name : "";
+  const state = item.v.speed > 0 ? "En movimiento · " + item.v.speed + " km/h" : "Detenido";
+  return "Unidad " + (item.v.label || item.v.id) + " (L" + (item.v.line || "—") + ")" + dir +
+    " — a " + item.km.toFixed(2) + " km · ~" + estMin(item.km) + " min (estimado) · " + state;
+}
+
+function showLine(line) {
+  const ln = DATA.lines.find((l) => l.line === line);
+  $("line-title").textContent = "Línea " + line;
+  const routes = DATA.routes.filter((r) => r.line === line);
+  $("line-variants").innerHTML = routes.map((r) => '<span class="chip">' + r.long_name + '</span>').join("");
+  const main = routes
+    .map((r) => ({ r, seq: DATA.route_stops[r.route_id] || [] }))
+    .sort((a, b) => b.seq.length - a.seq.length)[0];
+  const ordered = [];
+  const seen = new Set();
+  (main ? main.seq : []).forEach((id) => { if (!seen.has(id)) { seen.add(id); ordered.push(id); } });
+  routes.forEach((r) => {
+    (DATA.route_stops[r.route_id] || []).forEach((id) => { if (!seen.has(id)) { seen.add(id); ordered.push(id); } });
+  });
+  const ul = $("line-stops");
+  ul.innerHTML = "";
+  ordered.forEach((id) => {
+    const st = stopById(id);
+    if (!st) return;
+    const near = nearestVehicles(st.lat, st.lon, line, 1)[0];
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="st">' + st.name + '</span><span class="near">' +
+      (near ? "Unidad " + (near.v.label || near.v.id) + " · ~" + estMin(near.km) + " min (estimado)" : "Sin unidades cercanas") + '</span>';
+    li.addEventListener("click", () => showStation(st.id));
+    ul.appendChild(li);
+  });
+  show("line");
+}
+
+function showUnassigned() {
+  $("line-title").textContent = "Sin línea asignada";
+  $("line-variants").innerHTML = '<span class="chip">El feed no reportó ruta para estas unidades</span>';
+  const ul = $("line-stops");
+  ul.innerHTML = "";
+  DATA.vehicles.filter((v) => !v.line).slice(0, 50).forEach((v) => {
+    const near = nearestStops(v.lat, v.lon, 1)[0];
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="st">Unidad ' + (v.label || v.id) + '</span><span class="near">' +
+      (near ? "Cerca de " + near.s.name + " · " + near.km.toFixed(2) + " km" : "") + '</span>';
+    li.addEventListener("click", () => showUnit(v.id));
+    ul.appendChild(li);
+  });
+  show("line");
+}
+
+function showStation(id) {
+  const st = stopById(id);
+  if (!st) return;
+  $("station-title").textContent = st.name;
+  $("station-lines").innerHTML = st.lines.map((l) => {
+    const ln = DATA.lines.find((x) => x.line === l);
+    return '<span class="chip"><span class="dot" style="background:#' + (ln ? ln.color : "999") + '"></span>Línea ' + l + '</span>';
+  }).join("");
+  const ul = $("station-units");
+  ul.innerHTML = "";
+  const near = DATA.vehicles
+    .filter((v) => st.lines.includes(v.line))
+    .map((v) => ({ v, km: haversineKm(st.lat, st.lon, v.lat, v.lon) }))
+    .sort((a, b) => a.km - b.km)
+    .slice(0, 5);
+  if (!near.length) {
+    ul.innerHTML = "<li><span class='st'>Sin unidades cercanas en esta foto</span></li>";
+  }
+  near.forEach((item) => {
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="st">' + nearText(item) + '</span>';
+    li.addEventListener("click", () => showUnit(item.v.id));
+    ul.appendChild(li);
+  });
+  show("station");
+}
+
+function showUnit(id) {
+  const v = DATA.vehicles.find((x) => x.id === id);
+  if (!v) return;
+  const route = DATA.routes.find((r) => r.route_id === v.route_id);
+  $("unit-title").textContent = "Unidad " + (v.label || v.id);
+  $("unit-info").innerHTML =
+    "<p><b>Línea:</b> " + (v.line ? "Línea " + v.line : "Sin línea asignada") + "</p>" +
+    "<p><b>Sentido:</b> " + (route ? route.long_name : "No reportado") + "</p>" +
+    "<p><b>Estado:</b> " + (v.speed > 0 ? "En movimiento · " + v.speed + " km/h" : "Detenido") + "</p>" +
+    "<p><b>Inicio de viaje:</b> " + (v.start_time || "No reportado") + "</p>";
+  const ul = $("unit-stations");
+  ul.innerHTML = "";
+  nearestStops(v.lat, v.lon, 5).forEach((item) => {
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="st">' + item.s.name + '</span><span class="near">' + item.km.toFixed(2) + ' km</span>';
+    li.addEventListener("click", () => showStation(item.s.id));
+    ul.appendChild(li);
+  });
+  show("unit");
+}
+
+function renderSearch(q) {
+  const box = $("results");
+  box.innerHTML = "";
+  q = norm(q.trim());
+  if (q.length < 2) return;
+  DATA.stops
+    .filter((s) => norm(s.name).includes(q))
+    .slice(0, 10)
+    .forEach((s) => {
+      const div = document.createElement("div");
+      div.className = "result";
+      div.textContent = s.name + " · Línea " + (s.lines.join(", ") || "—");
+      div.addEventListener("click", () => showStation(s.id));
+      box.appendChild(div);
+    });
+}
+$("q").addEventListener("input", (e) => renderSearch(e.target.value));
+
+async function load() {
+  try {
+    const res = await fetch("data.json", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    DATA = await res.json();
+    $("snapshot").textContent = fmtTime(DATA.feed_timestamp) + " (hora CDMX)";
+    renderSummary();
+    renderAlerts();
+    renderLines();
+    $("error").innerHTML = "";
+  } catch (e) {
+    $("error").innerHTML = '<div class="err">No se pudieron cargar los datos en este momento. Intenta recargar la página.</div>';
+  }
+}
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
