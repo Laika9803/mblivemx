@@ -1,0 +1,30 @@
+name: Refresh Metrobus data
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python3 refresh.py
+        env:
+          METROBUS_API_USER: ${{ secrets.METROBUS_API_USER }}
+          METROBUS_API_PASS: ${{ secrets.METROBUS_API_PASS }}
+      - name: Commit data.json if it changed
+        run: |
+          git config user.name "mblivemx-bot"
+          git config user.email "bot@mblivemx.com"
+          git add data.json
+          git diff --cached --quiet || git commit -m "Actualizar foto GTFS-RT"
+          git push
